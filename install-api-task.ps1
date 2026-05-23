@@ -4,7 +4,7 @@
 
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
-$Script = Join-Path $Root "run-api.ps1"
+$Script = Join-Path $Root "api-serve.ps1"
 
 $Action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$Script`""
 $Trigger = New-ScheduledTaskTrigger -AtStartup
@@ -14,3 +14,4 @@ $Settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoi
 Register-ScheduledTask -TaskName $TaskName -Action $Action -Trigger $Trigger -Principal $Principal -Settings $Settings -Description "Local Whisper REST transcription API" -Force | Out-Null
 Start-ScheduledTask -TaskName $TaskName
 Write-Host "Scheduled task installed and started: $TaskName"
+

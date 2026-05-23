@@ -1,15 +1,10 @@
 ﻿$ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
-$Python = Join-Path $Root ".venv\Scripts\python.exe"
-$Log = Join-Path $Root "logs\api.log"
+$Script = Join-Path $Root "api-serve.ps1"
+$PidFile = Join-Path $Root "api.pid"
+$LogDir = Join-Path $Root "logs"
+$Log = Join-Path $LogDir "api.log"
 $EnvFile = Join-Path $Root ".env"
-
-if (-not (Test-Path $Python)) {
-    & (Join-Path $Root "install.ps1")
-}
-if (-not (Test-Path $Python)) {
-    throw "Virtual environment not found after install: $Python"
-}
 
 if (Test-Path $EnvFile) {
     Get-Content $EnvFile | ForEach-Object {
@@ -23,10 +18,29 @@ if (Test-Path $EnvFile) {
     }
 }
 
-New-Item -ItemType Directory -Force -Path (Join-Path $Root "logs") | Out-Null
-$env:PYTHONPATH = Join-Path $Root "app"
 $HostName = if ($env:WHISPER_API_HOST) { $env:WHISPER_API_HOST } else { "127.0.0.1" }
-$Port = if ($env:WHISPER_API_PORT) { $env:WHISPER_API_PORT } else { "8088" }
-& $Python -m uvicorn api:app --host $HostName --port $Port 2>&1 | Tee-Object -FilePath $Log -Append
+$Port = if ($env:WHISPER_API_PORT) { [int]$env:WHISPER_API_PORT } else { 8088 }
 
+if (Test-Path $PidFile) {
+    $existingPid = Get-Content -Path $PidFile -ErrorAction SilentlyContinue
+    if ($existingPid -and (Get-Process -Id ([int]$existingPid) -ErrorAction SilentlyContinue)) {
+        Write-Host "Local Whisper API is already running. PID: $existingPid"
+        Write-Host "Log: $Log"
+        exit 0
+    }
+    Remove-Item -Path $PidFile -Force -ErrorAction SilentlyContinue
+}
 
+$listener = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1
+if ($listener) {
+    $owner = Get-Process -Id $listener.OwningProcess -ErrorAction SilentlyContinue
+    Write-Error "Cannot start Local Whisper API: ${HostName}:${Port} is already in use by PID $($listener.OwningProcess) ($($owner.ProcessName)). Run .\status-api.ps1 for details."
+}
+
+New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
+$process = Start-Process -FilePath "powershell.exe" -ArgumentList @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $Script) -WorkingDirectory $Root -WindowStyle Hidden -PassThru
+$process.Id | Set-Content -Path $PidFile -Encoding ASCII
+Write-Host "Local Whisper API started in background. PID: $($process.Id)"
+Write-Host "URL: http://${HostName}:${Port}"
+Write-Host "Log: $Log"
+Write-Host "Stop: .\stop-api.ps1"

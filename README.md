@@ -105,20 +105,26 @@ WHISPER_API_MAX_UPLOAD_BYTES=262144000
 
 Use a strong private token. If the API must be reachable from other machines, set `WHISPER_API_HOST=0.0.0.0` and restrict access with Windows Firewall or a reverse proxy. Keep TLS termination outside this service, for example in IIS, nginx, or your ingress layer.
 
-Start the API manually:
+Start the API in the background:
 
 ```powershell
 cd <install-dir>
 .\run-api.ps1
 ```
 
-Install API autostart with Windows Scheduled Task:
+Check or stop the background API process:
 
 ```powershell
 cd <install-dir>
 .\install-api-task.ps1
 ```
 
+Install API autostart with Windows Scheduled Task. The scheduled task runs `api-serve.ps1` in the foreground so Windows can monitor and restart it correctly:
+
+```powershell
+cd <install-dir>
+.\install-api-task.ps1
+```
 Health check:
 
 ```powershell
@@ -176,6 +182,9 @@ Authorization:
 
 Operational notes:
 
+- `run-api.ps1` starts the API as a background process and writes `api.pid`; use `status-api.ps1` to inspect it and `stop-api.ps1` to stop it.
+- API wrapper logs are written to `logs/api.log`; uvicorn stdout and stderr are written to `logs/api.stdout.log` and `logs/api.stderr.log`.
+- If the configured port is already occupied, `run-api.ps1` exits with a clear error instead of leaving a half-started process.
 - Requests are serialized with a model lock because one GPU model instance is shared by the API process.
 - The maximum request size is controlled by `WHISPER_API_MAX_UPLOAD_BYTES`.
 - The uploaded audio bytes are held in process memory only for the duration of the request.
@@ -209,5 +218,7 @@ LM_STUDIO_MODEL=имя-модели-в-LM-Studio
 ```
 
 Если вывод содержит `float16`, CUDA доступна.
+
+
 
 
