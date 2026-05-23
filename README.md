@@ -5,7 +5,7 @@
 ## Быстрый запуск
 
 ```powershell
-cd S:\development\source\whisper
+cd S:\development\source\local-whisper
 .\install.ps1
 .\run-watch.ps1
 ```
@@ -44,7 +44,7 @@ WHISPER_COMPUTE_TYPE=float16
 На Windows надежнее запускать этот watcher через Scheduled Task, потому что обычный Python-скрипт не является SCM-службой.
 
 ```powershell
-cd S:\development\source\whisper
+cd S:\development\source\local-whisper
 .\install-task.ps1
 ```
 
@@ -118,3 +118,4 @@ LM_STUDIO_MODEL=имя-модели-в-LM-Studio
 ```
 
 Если вывод содержит `float16`, CUDA доступна.
+
