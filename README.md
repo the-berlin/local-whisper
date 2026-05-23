@@ -112,11 +112,13 @@ cd <install-dir>
 .\run-api.ps1
 ```
 
-Check or stop the background API process:
+Check, stop, or restart the background API process:
 
 ```powershell
 cd <install-dir>
-.\install-api-task.ps1
+.\status-api.ps1
+.\stop-api.ps1
+.\restart-api.ps1
 ```
 
 Install API autostart with Windows Scheduled Task. The scheduled task runs `api-serve.ps1` in the foreground so Windows can monitor and restart it correctly:
@@ -193,7 +195,7 @@ Transcription authorization:
 
 Operational notes:
 
-- `run-api.ps1` starts the API as a background process and writes `api.pid`; use `status-api.ps1` to inspect it and `stop-api.ps1` to stop it.
+- `run-api.ps1` starts the API as a background process and writes `api.pid`; use `status-api.ps1` to inspect it, `stop-api.ps1` to stop it, and `restart-api.ps1` to reload it after config or code changes.
 - The dashboard is served from `GET /`; live status updates use the `/ws/status` WebSocket, raw JSON is available from `GET /status`, and LM Studio models are exposed by `GET /lm-studio/models`.
 - API wrapper logs are written to `logs/api.log`; uvicorn stdout and stderr are written to `logs/api.stdout.log` and `logs/api.stderr.log`.
 - If the configured port is already occupied, `run-api.ps1` exits with a clear error instead of leaving a half-started process.
