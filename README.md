@@ -125,12 +125,23 @@ Install API autostart with Windows Scheduled Task. The scheduled task runs `api-
 cd <install-dir>
 .\install-api-task.ps1
 ```
+Built-in status dashboard:
+
+```text
+http://127.0.0.1:8088/
+```
+
+The root page is a React dashboard with live WebSocket updates from `/ws/status`. It shows loaded model settings, LM Studio configuration, active jobs, counters, processing totals, and recent request history. The same data is available as JSON:
+
+```powershell
+Invoke-RestMethod -Uri http://127.0.0.1:8088/status
+```
+
 Health check:
 
 ```powershell
 Invoke-RestMethod -Uri http://127.0.0.1:8088/health
 ```
-
 Create a transcription as JSON. Send the audio file as the raw request body with `Content-Type: application/octet-stream`; do not use `multipart/form-data` if you want to avoid temporary binary files on the server.
 
 ```powershell
@@ -183,6 +194,7 @@ Authorization:
 Operational notes:
 
 - `run-api.ps1` starts the API as a background process and writes `api.pid`; use `status-api.ps1` to inspect it and `stop-api.ps1` to stop it.
+- The dashboard is served from `GET /`; live status updates use the `/ws/status` WebSocket, and raw JSON is available from `GET /status`.
 - API wrapper logs are written to `logs/api.log`; uvicorn stdout and stderr are written to `logs/api.stdout.log` and `logs/api.stderr.log`.
 - If the configured port is already occupied, `run-api.ps1` exits with a clear error instead of leaving a half-started process.
 - Requests are serialized with a model lock because one GPU model instance is shared by the API process.
@@ -218,7 +230,5 @@ LM_STUDIO_MODEL=имя-модели-в-LM-Studio
 ```
 
 Если вывод содержит `float16`, CUDA доступна.
-
-
 
 
