@@ -5,7 +5,7 @@
 ## Быстрый запуск
 
 ```powershell
-cd S:\development\source\local-whisper
+cd <install-dir>
 .\install.ps1
 .\run-watch.ps1
 ```
@@ -44,7 +44,7 @@ WHISPER_COMPUTE_TYPE=float16
 На Windows надежнее запускать этот watcher через Scheduled Task, потому что обычный Python-скрипт не является SCM-службой.
 
 ```powershell
-cd S:\development\source\local-whisper
+cd <install-dir>
 .\install-task.ps1
 ```
 
@@ -92,9 +92,9 @@ Copy-Item .env.rtx3090.example .env
 
 ## REST API
 
-API запускается отдельным процессом и не сохраняет загруженные аудио/видео файлы на диск. Тело запроса читается как сырой поток байтов в память, транскрибируется, затем возвращается JSON, plain text или SRT.
+The REST API is the recommended production interface when another system needs on-demand transcription. It runs as a separate process, keeps the Whisper model loaded, accepts an authorized HTTP request, reads the uploaded audio bytes into memory, and returns the transcription. The API does not persist the uploaded binary file to disk.
 
-Перед запуском задайте токен в `.env`:
+Configure the API in `.env` before exposing it:
 
 ```text
 WHISPER_API_HOST=127.0.0.1
@@ -103,26 +103,29 @@ WHISPER_API_TOKEN=change-this-token
 WHISPER_API_MAX_UPLOAD_BYTES=262144000
 ```
 
-Запуск вручную:
+Use a strong private token. If the API must be reachable from other machines, set `WHISPER_API_HOST=0.0.0.0` and restrict access with Windows Firewall or a reverse proxy. Keep TLS termination outside this service, for example in IIS, nginx, or your ingress layer.
+
+Start the API manually:
 
 ```powershell
-cd S:\development\source\local-whisper
+cd <install-dir>
 .\run-api.ps1
 ```
 
-Автозапуск API через Scheduled Task:
+Install API autostart with Windows Scheduled Task:
 
 ```powershell
+cd <install-dir>
 .\install-api-task.ps1
 ```
 
-Проверка состояния:
+Health check:
 
 ```powershell
 Invoke-RestMethod -Uri http://127.0.0.1:8088/health
 ```
 
-Транскрипция с JSON-ответом. Тело запроса - сырой файл, без `multipart/form-data`, чтобы сервер не создавал временный бинарник:
+Create a transcription as JSON. Send the audio file as the raw request body with `Content-Type: application/octet-stream`; do not use `multipart/form-data` if you want to avoid temporary binary files on the server.
 
 ```powershell
 $headers = @{
@@ -130,14 +133,53 @@ $headers = @{
   "Content-Type" = "application/octet-stream"
   "X-Filename" = "call.wav"
 }
-Invoke-RestMethod -Uri "http://127.0.0.1:8088/v1/transcriptions" -Method Post -Headers $headers -InFile "S:\audio\call.wav"
+
+Invoke-RestMethod `
+  -Uri "http://127.0.0.1:8088/v1/transcriptions" `
+  -Method Post `
+  -Headers $headers `
+  -InFile "C:\Audio\call.wav"
 ```
 
-Ответ в формате SRT:
+Return plain text:
 
 ```powershell
-curl.exe -H "Authorization: Bearer change-this-token" -H "Content-Type: application/octet-stream" -H "X-Filename: call.wav" --data-binary "@S:\audio\call.wav" "http://127.0.0.1:8088/v1/transcriptions?response_format=srt"
+Invoke-RestMethod `
+  -Uri "http://127.0.0.1:8088/v1/transcriptions?response_format=text" `
+  -Method Post `
+  -Headers $headers `
+  -InFile "C:\Audio\call.wav"
 ```
+
+Return SRT subtitles:
+
+```powershell
+curl.exe `
+  -H "Authorization: Bearer change-this-token" `
+  -H "Content-Type: application/octet-stream" `
+  -H "X-Filename: call.wav" `
+  --data-binary "@C:\Audio\call.wav" `
+  "http://127.0.0.1:8088/v1/transcriptions?response_format=srt"
+```
+
+Response formats:
+
+- `json` returns `metadata`, `text`, `segments`, and `srt`.
+- `text` returns only the recognized transcript as `text/plain`.
+- `srt` returns subtitles as `application/x-subrip`.
+
+Authorization:
+
+- Header: `Authorization: Bearer <WHISPER_API_TOKEN>`
+- Missing or invalid token returns `401 Unauthorized`.
+- Missing server token returns `503`, so production cannot accidentally run without authentication.
+
+Operational notes:
+
+- Requests are serialized with a model lock because one GPU model instance is shared by the API process.
+- The maximum request size is controlled by `WHISPER_API_MAX_UPLOAD_BYTES`.
+- The uploaded audio bytes are held in process memory only for the duration of the request.
+- Generated transcripts are returned to the caller and are not written to `out` by the REST API.
 ## ffmpeg
 
 Системный `ffmpeg` не обязателен: `faster-whisper` ставит PyAV, который уже содержит нужные FFmpeg-библиотеки для большинства форматов. Если конкретный формат не прочитается, тогда установите:
@@ -167,4 +209,5 @@ LM_STUDIO_MODEL=имя-модели-в-LM-Studio
 ```
 
 Если вывод содержит `float16`, CUDA доступна.
+
 

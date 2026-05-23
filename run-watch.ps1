@@ -4,7 +4,10 @@ $Python = Join-Path $Root ".venv\Scripts\python.exe"
 $Log = Join-Path $Root "logs\transcriber.log"
 
 if (-not (Test-Path $Python)) {
-    throw "Virtual environment not found. Run .\install.ps1 first."
+    & (Join-Path $Root "install.ps1")
+}
+if (-not (Test-Path $Python)) {
+    throw "Virtual environment not found after install: $Python"
 }
 
 New-Item -ItemType Directory -Force -Path (Join-Path $Root "logs") | Out-Null
