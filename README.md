@@ -89,6 +89,55 @@ Copy-Item .env.rtx3090.example .env
 .\install-task.ps1
 ```
 
+
+## REST API
+
+API запускается отдельным процессом и не сохраняет загруженные аудио/видео файлы на диск. Тело запроса читается как сырой поток байтов в память, транскрибируется, затем возвращается JSON, plain text или SRT.
+
+Перед запуском задайте токен в `.env`:
+
+```text
+WHISPER_API_HOST=127.0.0.1
+WHISPER_API_PORT=8088
+WHISPER_API_TOKEN=change-this-token
+WHISPER_API_MAX_UPLOAD_BYTES=262144000
+```
+
+Запуск вручную:
+
+```powershell
+cd S:\development\source\local-whisper
+.\run-api.ps1
+```
+
+Автозапуск API через Scheduled Task:
+
+```powershell
+.\install-api-task.ps1
+```
+
+Проверка состояния:
+
+```powershell
+Invoke-RestMethod -Uri http://127.0.0.1:8088/health
+```
+
+Транскрипция с JSON-ответом. Тело запроса - сырой файл, без `multipart/form-data`, чтобы сервер не создавал временный бинарник:
+
+```powershell
+$headers = @{
+  Authorization = "Bearer change-this-token"
+  "Content-Type" = "application/octet-stream"
+  "X-Filename" = "call.wav"
+}
+Invoke-RestMethod -Uri "http://127.0.0.1:8088/v1/transcriptions" -Method Post -Headers $headers -InFile "S:\audio\call.wav"
+```
+
+Ответ в формате SRT:
+
+```powershell
+curl.exe -H "Authorization: Bearer change-this-token" -H "Content-Type: application/octet-stream" -H "X-Filename: call.wav" --data-binary "@S:\audio\call.wav" "http://127.0.0.1:8088/v1/transcriptions?response_format=srt"
+```
 ## ffmpeg
 
 Системный `ffmpeg` не обязателен: `faster-whisper` ставит PyAV, который уже содержит нужные FFmpeg-библиотеки для большинства форматов. Если конкретный формат не прочитается, тогда установите:

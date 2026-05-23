@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 import argparse
+from io import BytesIO
 import sys
 import json
 import os
@@ -134,14 +135,18 @@ def format_srt_time(seconds: float) -> str:
     return f"{hours:02}:{minutes:02}:{secs:02},{millis:03}"
 
 
-def write_srt(path: Path, segments: list[dict]) -> None:
+def build_srt(segments: list[dict]) -> str:
     lines: list[str] = []
     for index, segment in enumerate(segments, start=1):
         lines.append(str(index))
         lines.append(f"{format_srt_time(segment['start'])} --> {format_srt_time(segment['end'])}")
         lines.append(segment["text"].strip())
         lines.append("")
-    path.write_text("\n".join(lines), encoding="utf-8")
+    return "\n".join(lines)
+
+
+def write_srt(path: Path, segments: list[dict]) -> None:
+    path.write_text(build_srt(segments), encoding="utf-8")
 
 
 def polish_with_lm_studio(text: str) -> Optional[str]:
@@ -237,14 +242,9 @@ def fail_file(settings: Settings, audio_path: Path, reason: str) -> None:
     log(f"Moved to failed: {target} ({reason})")
 
 
-def transcribe_file(model: WhisperModel, settings: Settings, audio_path: Path) -> None:
-    rel = relative_path(audio_path, settings.inbox)
-    log(f"Transcribing: {rel}")
-    job_out = output_directory(settings, audio_path)
-    job_out.mkdir(parents=True, exist_ok=False)
-
+def transcribe_audio(model: WhisperModel, settings: Settings, audio_source, source_name: str) -> dict:
     segments_iter, info = model.transcribe(
-        str(audio_path),
+        audio_source,
         language=settings.language,
         beam_size=settings.beam_size,
         vad_filter=settings.vad_filter,
@@ -254,10 +254,8 @@ def transcribe_file(model: WhisperModel, settings: Settings, audio_path: Path) -
         for item in segments_iter
     ]
     text = "\n".join(segment["text"].strip() for segment in segments if segment["text"].strip()).strip()
-
     metadata = {
-        "source": str(audio_path),
-        "relative_source": str(rel),
+        "source": source_name,
         "created_at": datetime.now().isoformat(timespec="seconds"),
         "model": settings.model_name,
         "language": getattr(info, "language", None),
@@ -267,14 +265,34 @@ def transcribe_file(model: WhisperModel, settings: Settings, audio_path: Path) -
         "device": settings.device,
         "compute_type": settings.compute_type,
     }
-
-    (job_out / "transcript.txt").write_text(text + "\n", encoding="utf-8")
-    (job_out / "segments.json").write_text(json.dumps({"metadata": metadata, "segments": segments}, ensure_ascii=False, indent=2), encoding="utf-8")
-    write_srt(job_out / "subtitles.srt", segments)
-
+    result = {
+        "metadata": metadata,
+        "text": text,
+        "segments": segments,
+        "srt": build_srt(segments),
+    }
     polished = polish_with_lm_studio(text)
     if polished:
-        (job_out / "transcript.polished.txt").write_text(polished + "\n", encoding="utf-8")
+        result["polished_text"] = polished
+    return result
+
+
+def transcribe_bytes(model: WhisperModel, settings: Settings, audio_bytes: bytes, source_name: str) -> dict:
+    return transcribe_audio(model, settings, BytesIO(audio_bytes), source_name)
+
+
+def transcribe_file(model: WhisperModel, settings: Settings, audio_path: Path) -> None:
+    rel = relative_path(audio_path, settings.inbox)
+    log(f"Transcribing: {rel}")
+    job_out = output_directory(settings, audio_path)
+    job_out.mkdir(parents=True, exist_ok=False)
+
+    result = transcribe_audio(model, settings, str(audio_path), str(rel))
+    (job_out / "transcript.txt").write_text(result["text"] + "\n", encoding="utf-8")
+    (job_out / "segments.json").write_text(json.dumps({"metadata": result["metadata"], "segments": result["segments"]}, ensure_ascii=False, indent=2), encoding="utf-8")
+    (job_out / "subtitles.srt").write_text(result["srt"], encoding="utf-8")
+    if result.get("polished_text"):
+        (job_out / "transcript.polished.txt").write_text(result["polished_text"] + "\n", encoding="utf-8")
 
     target = move_to_bucket(settings, audio_path, settings.archive)
     log(f"Done: {rel} -> {job_out}; archived as {target}")
@@ -338,6 +356,7 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         log("Stopped by user")
         raise SystemExit(0)
+
 
 
 
