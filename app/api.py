@@ -157,6 +157,19 @@ STATUS_PAGE = r'''<!doctype html>
       const history = s.history || [];
       const lm = config.lm_studio || {};
       const avg = stats.completed_requests ? stats.total_processing_seconds / stats.completed_requests : 0;
+      const lmModelOptions = useMemo(() => {
+        const seen = new Set();
+        const options = [];
+        const add = (id, source) => {
+          const value = String(id || '').trim();
+          if (!value || seen.has(value)) return;
+          seen.add(value);
+          options.push({ id: value, source });
+        };
+        add(lm.model, 'selected');
+        lmModels.forEach(model => add(model.id, model.source || 'server'));
+        return options;
+      }, [lm.model, lmModels]);
       const refreshLmModels = async () => {
         setLmModelsError('');
         try {
@@ -251,13 +264,13 @@ STATUS_PAGE = r'''<!doctype html>
               e('button', { onClick: () => setLmEnabled(false), disabled: !lm.enabled }, 'Disable LM Studio'),
               e('button', { onClick: refreshLmModels }, 'Refresh models'),
               e('select', { value: lm.model || '', onChange: event => setLmModel(event.target.value) },
-                e('option', { value: lm.model || '' }, lm.model || 'Select model'),
-                lmModels.map(model => e('option', { key: model.id, value: model.id }, model.id))
+                lmModelOptions.length ? null : e('option', { value: '' }, 'Select model'),
+                lmModelOptions.map(model => e('option', { key: model.id, value: model.id }, model.id))
               ),
               e('span', { className: 'small' }, actionStatus)
             ),
             lmModelsError ? e('div', { className: 'small errtext', style: { marginTop: '8px' } }, 'LM Studio models: ' + lmModelsError) : null,
-            lmModels.length ? e('div', { className: 'small', style: { marginTop: '8px' } }, 'Available models: ' + lmModels.map(model => model.id).join(', ')) : null,
+            lmModelOptions.length ? e('div', { className: 'small', style: { marginTop: '8px' } }, 'Available models: ' + lmModelOptions.map(model => model.id).join(', ')) : null,
             e('div', { style: { marginTop: '14px' } }, e('div', { className: 'small', style: { marginBottom: '6px' } }, 'LM Studio prompt'), e('pre', null, lm.prompt || '-'))
           )
         ),
@@ -331,7 +344,7 @@ def fetch_lm_studio_models() -> dict[str, Any]:
 
     add_model(fallback_model, source="env")
     try:
-        timeout = env_int("LM_STUDIO_MODELS_TIMEOUT_SECONDS", 2)
+        timeout = env_int("LM_STUDIO_MODELS_TIMEOUT_SECONDS", 15)
         response = requests.get(f"{base_url}/models", headers=lm_studio_headers(), timeout=max(timeout, 1))
         response.raise_for_status()
         data = response.json()
@@ -389,7 +402,7 @@ def current_snapshot() -> dict[str, Any]:
                     "token_configured": bool(os.environ.get("LM_STUDIO_TOKEN", "").strip()),
                     "max_tokens": env_int("LM_STUDIO_MAX_TOKENS", 4096),
                     "chunk_max_chars": env_int("LM_STUDIO_CHUNK_MAX_CHARS", 3500),
-                    "models_timeout_seconds": env_int("LM_STUDIO_MODELS_TIMEOUT_SECONDS", 2),
+                    "models_timeout_seconds": env_int("LM_STUDIO_MODELS_TIMEOUT_SECONDS", 15),
                     "prompt": os.environ.get("LM_STUDIO_PROMPT", "Clean up this transcript without changing meaning."),
                 },
             },

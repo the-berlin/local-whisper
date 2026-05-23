@@ -1,8 +1,8 @@
-﻿# Local Whisper Transcriber
+# Local Whisper Transcriber
 
-Автономный локальный транскрибатор для Windows Platform, including Windows Server, + NVIDIA GPU. Использует `faster-whisper`, CUDA через `ctranslate2`, и хранит модели локально в `models`.
+Offline local transcription service for Windows Platform, including Windows Server, with NVIDIA GPU acceleration. It uses `faster-whisper`, CUDA through `ctranslate2`, and stores downloaded Whisper models locally in `models`.
 
-## Быстрый запуск
+## Quick Start
 
 ```powershell
 cd <install-dir>
@@ -10,26 +10,26 @@ cd <install-dir>
 .\run-watch.ps1
 ```
 
-Кладите аудио/видео файлы в `inbox`. Можно складывать пачками в подпапки, например `inbox\12`; структура подпапок сохранится в `out`, `archive` и `failed`.
+Put audio or video files into `inbox`. Batch folders are supported, for example `inbox\12`; the same folder structure is preserved in `out`, `archive`, and `failed`.
 
-Результаты появляются в `out\<подпапка>\<имя файла>`:
+Results are written to `out\<subfolder>\<file-name>`:
 
-- `transcript.txt` - обычный текст
-- `subtitles.srt` - субтитры
-- `segments.json` - сегменты с таймкодами и метаданными
-- `transcript.polished.txt` - появляется только если включена вычитка через LM Studio
+- `transcript.txt` - plain transcript text
+- `subtitles.srt` - SRT subtitles
+- `segments.json` - timestamped segments and metadata
+- `transcript.polished.txt` - created only when LM Studio polishing is enabled
 
-После успешной обработки исходный файл переносится в `archive`. При ошибке - в `failed`, рядом создается файл причины `*.reason.txt`.
+After successful processing, the source file is moved to `archive`. Failed files are moved to `failed`, with a matching `*.reason.txt` file.
 
-## Профили GPU
+## GPU Profiles
 
-Локальный `.env` не хранится в git. После клонирования скопируйте подходящий пример:
+The local `.env` file is not stored in git. After cloning, copy the closest profile:
 
 ```powershell
 Copy-Item .env.rtx3090.example .env
 ```
 
-Для RTX 3090 24GB профиль использует:
+The RTX 3090 24 GB profile uses:
 
 ```text
 WHISPER_MODEL=large-v3
@@ -37,18 +37,18 @@ WHISPER_DEVICE=cuda
 WHISPER_COMPUTE_TYPE=float16
 ```
 
-Для RTX 4060 8GB используйте `.env.rtx4060.example`; там `int8_float16`, чтобы `large-v3` надежнее помещалась в VRAM.
+For RTX 4060 8 GB, use `.env.rtx4060.example`; it uses `int8_float16` so `large-v3` fits into VRAM more reliably.
 
-## Автозапуск как служба-процесс
+## Watcher Autostart
 
-На Windows надежнее запускать этот watcher через Scheduled Task, потому что обычный Python-скрипт не является SCM-службой.
+On Windows Platform, the watcher is best managed through Windows Scheduled Task because a plain Python script is not an SCM service.
 
 ```powershell
 cd <install-dir>
 .\install-task.ps1
 ```
 
-Управление:
+Task management:
 
 ```powershell
 .\status-task.ps1
@@ -57,38 +57,37 @@ cd <install-dir>
 .\uninstall-task.ps1
 ```
 
-Задача называется `LocalWhisperTranscriber` и запускает `run-watch.ps1` при старте Windows.
+The task is named `LocalWhisperTranscriber` and starts `run-watch.ps1` when Windows starts.
 
-## Перенос на Windows Platform, including Windows Server, + RTX 3090
+## Migration To Windows Platform, Including Windows Server, With RTX 3090
 
-1. Установите свежий NVIDIA Driver для RTX 3090.
-2. Установите Python 3.12 x64 и включите Python Launcher `py`.
-3. Склонируйте репозиторий в нужную папку.
-4. Скопируйте профиль:
+1. Install the latest NVIDIA driver for RTX 3090.
+2. Install Python 3.12 x64 and enable the Python Launcher `py`.
+3. Clone the repository into the target folder.
+4. Copy the RTX 3090 profile:
 
 ```powershell
 Copy-Item .env.rtx3090.example .env
 ```
 
-5. Проверьте пути в `.env`.
-6. Установите зависимости:
+5. Review `.env`.
+6. Install dependencies:
 
 ```powershell
 .\install.ps1
 ```
 
-7. Прогрейте модель:
+7. Warm up the model:
 
 ```powershell
 .\.venv\Scripts\python.exe -c "from faster_whisper import WhisperModel; WhisperModel('large-v3', device='cuda', compute_type='float16', download_root=r'.\models'); print('ok')"
 ```
 
-8. Включите автозапуск:
+8. Enable watcher autostart if needed:
 
 ```powershell
 .\install-task.ps1
 ```
-
 
 ## REST API
 
@@ -127,6 +126,7 @@ Install API autostart with Windows Scheduled Task. The scheduled task runs `api-
 cd <install-dir>
 .\install-api-task.ps1
 ```
+
 Built-in status dashboard:
 
 ```text
@@ -144,6 +144,7 @@ Health check:
 ```powershell
 Invoke-RestMethod -Uri http://127.0.0.1:18088/health
 ```
+
 Create a transcription as JSON. Send the audio file as the raw request body with `Content-Type: application/octet-stream`; do not use `multipart/form-data` if you want to avoid temporary binary files on the server.
 
 ```powershell
@@ -203,9 +204,10 @@ Operational notes:
 - The maximum request size is controlled by `WHISPER_API_MAX_UPLOAD_BYTES`.
 - The uploaded audio bytes are held in process memory only for the duration of the request.
 - Generated transcripts are returned to the caller and are not written to `out` by the REST API.
+
 ## ffmpeg
 
-Системный `ffmpeg` не обязателен: `faster-whisper` ставит PyAV, который уже содержит нужные FFmpeg-библиотеки для большинства форматов. Если конкретный формат не прочитается, тогда установите:
+System `ffmpeg` is usually not required: `faster-whisper` installs PyAV, which already includes the FFmpeg libraries needed for most formats. If a specific format fails to decode, install FFmpeg:
 
 ```powershell
 winget install Gyan.FFmpeg
@@ -223,7 +225,7 @@ LM_STUDIO_BASE_URL=http://127.0.0.1:1234/v1
 LM_STUDIO_MODEL=local-model
 LM_STUDIO_MAX_TOKENS=4096
 LM_STUDIO_CHUNK_MAX_CHARS=3500
-LM_STUDIO_MODELS_TIMEOUT_SECONDS=2
+LM_STUDIO_MODELS_TIMEOUT_SECONDS=15
 LM_STUDIO_TOKEN=
 LM_STUDIO_PROMPT=Correct obvious speech-recognition errors in the transcript. Preserve the original meaning, speaker intent, names, numbers, dates, technical terms, and structure. Do not add facts, explanations, summaries, or new information. Return only the corrected transcript text.
 ```
@@ -243,11 +245,11 @@ http://127.0.0.1:18088/
 Use the dashboard to refresh available LM Studio models, select the polishing model, and enable or disable LM Studio polishing. These dashboard controls are intentionally public on the local status page; the `LM_STUDIO_TOKEN` stays only on the server and is never sent to the browser. If LM Studio is slow or unavailable, the dashboard still shows the model from `.env` and reports the connection error as diagnostics. The prompt is read-only in the dashboard and cannot be changed through the public config endpoint. Runtime changes affect only the running API process; update `.env` as well if you want the same settings after restart.
 
 Long transcripts are polished in chunks built from Whisper segments. Tune `LM_STUDIO_CHUNK_MAX_CHARS` for smaller local models; `3500` is a conservative default. `LM_STUDIO_MODELS_TIMEOUT_SECONDS` controls how long the dashboard waits for `/v1/models` before falling back to the configured `.env` model.
-## Проверка GPU
+
+## GPU Check
 
 ```powershell
 .\.venv\Scripts\python.exe -c "import ctranslate2; print(ctranslate2.get_supported_compute_types('cuda'))"
 ```
 
-Если вывод содержит `float16`, CUDA доступна.
-
+If the output contains `float16`, CUDA is available.
