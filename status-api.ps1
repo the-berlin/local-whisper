@@ -15,7 +15,7 @@ if (Test-Path $EnvFile) {
 }
 
 $hostName = if ($env:WHISPER_API_HOST) { $env:WHISPER_API_HOST } else { "127.0.0.1" }
-$port = if ($env:WHISPER_API_PORT) { [int]$env:WHISPER_API_PORT } else { 8088 }
+$port = if ($env:WHISPER_API_PORT) { [int]$env:WHISPER_API_PORT } else { 18088 }
 $pidValue = if (Test-Path $PidFile) { Get-Content -Path $PidFile -ErrorAction SilentlyContinue } else { $null }
 $process = if ($pidValue) { Get-Process -Id ([int]$pidValue) -ErrorAction SilentlyContinue } else { $null }
 $listeners = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue | ForEach-Object {
@@ -33,3 +33,4 @@ $listeners = Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction Si
     StdErrLog = Join-Path $Root "logs\api.stderr.log"
     PortListeners = @($listeners)
 } | Format-List
+

@@ -29,7 +29,7 @@ New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 $PID | Set-Content -Path $PidFile -Encoding ASCII
 $env:PYTHONPATH = Join-Path $Root "app"
 $HostName = if ($env:WHISPER_API_HOST) { $env:WHISPER_API_HOST } else { "127.0.0.1" }
-$Port = if ($env:WHISPER_API_PORT) { $env:WHISPER_API_PORT } else { "8088" }
+$Port = if ($env:WHISPER_API_PORT) { $env:WHISPER_API_PORT } else { "18088" }
 
 try {
     $StdOutLog = Join-Path $LogDir "api.stdout.log"
@@ -51,6 +51,7 @@ finally {
         }
     }
 }
+
 
 
 

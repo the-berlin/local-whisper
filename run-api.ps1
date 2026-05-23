@@ -19,7 +19,7 @@ if (Test-Path $EnvFile) {
 }
 
 $HostName = if ($env:WHISPER_API_HOST) { $env:WHISPER_API_HOST } else { "127.0.0.1" }
-$Port = if ($env:WHISPER_API_PORT) { [int]$env:WHISPER_API_PORT } else { 8088 }
+$Port = if ($env:WHISPER_API_PORT) { [int]$env:WHISPER_API_PORT } else { 18088 }
 
 if (Test-Path $PidFile) {
     $existingPid = Get-Content -Path $PidFile -ErrorAction SilentlyContinue
@@ -44,3 +44,4 @@ Write-Host "Local Whisper API started in background. PID: $($process.Id)"
 Write-Host "URL: http://${HostName}:${Port}"
 Write-Host "Log: $Log"
 Write-Host "Stop: .\stop-api.ps1"
+

@@ -29,7 +29,7 @@ if (Test-Path $EnvFile) {
         }
     }
 }
-$Port = if ($env:WHISPER_API_PORT) { [int]$env:WHISPER_API_PORT } else { 8088 }
+$Port = if ($env:WHISPER_API_PORT) { [int]$env:WHISPER_API_PORT } else { 18088 }
 $stopped = $false
 
 if (Test-Path $PidFile) {
@@ -58,3 +58,4 @@ foreach ($listener in $listeners) {
 if (-not $stopped) {
     Write-Host "Local Whisper API is not running."
 }
+

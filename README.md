@@ -98,7 +98,7 @@ Configure the API in `.env` before exposing it:
 
 ```text
 WHISPER_API_HOST=127.0.0.1
-WHISPER_API_PORT=8088
+WHISPER_API_PORT=18088
 WHISPER_API_TOKEN=change-this-token
 WHISPER_API_MAX_UPLOAD_BYTES=262144000
 ```
@@ -128,19 +128,19 @@ cd <install-dir>
 Built-in status dashboard:
 
 ```text
-http://127.0.0.1:8088/
+http://127.0.0.1:18088/
 ```
 
 The root page is a React dashboard with live WebSocket updates from `/ws/status`. It shows loaded model settings, LM Studio configuration, active jobs, counters, processing totals, and recent request history. The same data is available as JSON:
 
 ```powershell
-Invoke-RestMethod -Uri http://127.0.0.1:8088/status
+Invoke-RestMethod -Uri http://127.0.0.1:18088/status
 ```
 
 Health check:
 
 ```powershell
-Invoke-RestMethod -Uri http://127.0.0.1:8088/health
+Invoke-RestMethod -Uri http://127.0.0.1:18088/health
 ```
 Create a transcription as JSON. Send the audio file as the raw request body with `Content-Type: application/octet-stream`; do not use `multipart/form-data` if you want to avoid temporary binary files on the server.
 
@@ -152,7 +152,7 @@ $headers = @{
 }
 
 Invoke-RestMethod `
-  -Uri "http://127.0.0.1:8088/v1/transcriptions" `
+  -Uri "http://127.0.0.1:18088/v1/transcriptions" `
   -Method Post `
   -Headers $headers `
   -InFile "C:\Audio\call.wav"
@@ -162,7 +162,7 @@ Return plain text:
 
 ```powershell
 Invoke-RestMethod `
-  -Uri "http://127.0.0.1:8088/v1/transcriptions?response_format=text" `
+  -Uri "http://127.0.0.1:18088/v1/transcriptions?response_format=text" `
   -Method Post `
   -Headers $headers `
   -InFile "C:\Audio\call.wav"
@@ -176,7 +176,7 @@ curl.exe `
   -H "Content-Type: application/octet-stream" `
   -H "X-Filename: call.wav" `
   --data-binary "@C:\Audio\call.wav" `
-  "http://127.0.0.1:8088/v1/transcriptions?response_format=srt"
+  "http://127.0.0.1:18088/v1/transcriptions?response_format=srt"
 ```
 
 Response formats:
@@ -230,5 +230,6 @@ LM_STUDIO_MODEL=имя-модели-в-LM-Studio
 ```
 
 Если вывод содержит `float16`, CUDA доступна.
+
 
 
