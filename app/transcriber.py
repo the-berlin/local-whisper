@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 import argparse
+import sys
 import json
 import os
 import shutil
@@ -12,6 +13,28 @@ from pathlib import Path
 from typing import Iterable, Optional
 
 import requests
+
+_CUDA_DLL_DIRECTORY_HANDLES = []
+
+
+def add_cuda_dll_directories() -> None:
+    if os.name != "nt":
+        return
+    site_packages = Path(sys.prefix) / "Lib" / "site-packages"
+    directories = [
+        site_packages / "nvidia" / "cublas" / "bin",
+        site_packages / "nvidia" / "cudnn" / "bin",
+        site_packages / "nvidia" / "cuda_nvrtc" / "bin",
+        site_packages / "ctranslate2",
+    ]
+    existing = [str(directory) for directory in directories if directory.exists()]
+    if existing:
+        os.environ["PATH"] = os.pathsep.join(existing + [os.environ.get("PATH", "")])
+    for directory in existing:
+        _CUDA_DLL_DIRECTORY_HANDLES.append(os.add_dll_directory(directory))
+
+
+add_cuda_dll_directories()
 from faster_whisper import WhisperModel
 
 AUDIO_EXTENSIONS = {".wav", ".mp3", ".m4a", ".mp4", ".aac", ".ogg", ".opus", ".flac", ".wma", ".webm", ".mkv", ".mov"}
@@ -315,3 +338,6 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         log("Stopped by user")
         raise SystemExit(0)
+
+
+
