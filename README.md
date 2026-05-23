@@ -96,13 +96,14 @@ The REST API is the recommended production interface when another system needs o
 Configure the API in `.env` before exposing it:
 
 ```text
-WHISPER_API_HOST=127.0.0.1
+LOCAL_IP=127.0.0.1
+WHISPER_API_HOST=${LOCAL_IP}
 WHISPER_API_PORT=18088
 WHISPER_API_TOKEN=change-this-token
 WHISPER_API_MAX_UPLOAD_BYTES=262144000
 ```
 
-Use a strong private token. If the API must be reachable from other machines, set `WHISPER_API_HOST=0.0.0.0` and restrict access with Windows Firewall or a reverse proxy. Keep TLS termination outside this service, for example in IIS, nginx, or your ingress layer.
+Use a strong private token. Use `127.0.0.1` for a single-machine install, or set `LOCAL_IP` to the server LAN/VPN IP when the API must be reachable from other machines. Restrict access with Windows Firewall or a reverse proxy. Keep TLS termination outside this service, for example in IIS, nginx, or your ingress layer.
 
 Start the API in the background:
 
@@ -220,8 +221,9 @@ LM Studio is optional and is used only as a second pass to polish the raw Whispe
 Configure LM Studio in `.env`:
 
 ```text
+LOCAL_IP=127.0.0.1
 LM_STUDIO_ENABLED=false
-LM_STUDIO_BASE_URL=http://127.0.0.1:1234/v1
+LM_STUDIO_BASE_URL=http://${LOCAL_IP}:1234/v1
 LM_STUDIO_MODEL=local-model
 LM_STUDIO_MAX_TOKENS=4096
 LM_STUDIO_CHUNK_MAX_CHARS=3500

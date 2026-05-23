@@ -6,6 +6,17 @@ $Log = Join-Path $LogDir "api.log"
 $PidFile = Join-Path $Root "api.pid"
 $EnvFile = Join-Path $Root ".env"
 
+function Expand-EnvValue {
+    param([string]$Value)
+    return [regex]::Replace($Value, '\$\{([^}]+)\}', {
+        param($Match)
+        $name = $Match.Groups[1].Value
+        $resolved = [Environment]::GetEnvironmentVariable($name, "Process")
+        if ($resolved) { return $resolved }
+        return $Match.Value
+    })
+}
+
 if (-not (Test-Path $Python)) {
     & (Join-Path $Root "install.ps1")
 }
@@ -19,7 +30,7 @@ if (Test-Path $EnvFile) {
         if ($line -and -not $line.StartsWith("#") -and $line.Contains("=")) {
             $key, $value = $line.Split("=", 2)
             if (-not [Environment]::GetEnvironmentVariable($key, "Process")) {
-                [Environment]::SetEnvironmentVariable($key, $value.Trim('"').Trim("'"), "Process")
+                [Environment]::SetEnvironmentVariable($key, (Expand-EnvValue $value.Trim('"').Trim("'")), "Process")
             }
         }
     }

@@ -5,6 +5,7 @@ from io import BytesIO
 import sys
 import json
 import os
+import re
 import shutil
 import time
 import traceback
@@ -58,6 +59,16 @@ def env_int(name: str, default: int) -> int:
         return default
 
 
+_ENV_REF_PATTERN = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
+
+
+def expand_env_value(value: str) -> str:
+    def replace(match: re.Match[str]) -> str:
+        return os.environ.get(match.group(1), match.group(0))
+
+    return _ENV_REF_PATTERN.sub(replace, value)
+
+
 def load_env_file(path: Path) -> None:
     if not path.exists():
         return
@@ -68,7 +79,7 @@ def load_env_file(path: Path) -> None:
         key, value = line.split("=", 1)
         key = key.strip()
         value = value.strip().strip('"').strip("'")
-        os.environ.setdefault(key, value)
+        os.environ.setdefault(key, expand_env_value(value))
 
 
 def timestamp() -> str:
