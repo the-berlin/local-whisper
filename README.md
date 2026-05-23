@@ -131,7 +131,7 @@ Built-in status dashboard:
 http://127.0.0.1:18088/
 ```
 
-The root page is a React dashboard with live WebSocket updates from `/ws/status`. It shows loaded model settings, LM Studio configuration and runtime toggle, active jobs, counters, processing totals, and recent request history. The same data is available as JSON:
+The root page is a React dashboard with live WebSocket updates from `/ws/status`. It shows loaded model settings, LM Studio configuration, available LM Studio models, runtime LM Studio controls, active jobs, counters, processing totals, and recent request history. The same data is available as JSON:
 
 ```powershell
 Invoke-RestMethod -Uri http://127.0.0.1:18088/status
@@ -172,7 +172,7 @@ Return SRT subtitles:
 
 ```powershell
 curl.exe `
-  -H "Authorization: Bearer change-this-token" `
+  -H "Transcription authorization: Bearer change-this-token" `
   -H "Content-Type: application/octet-stream" `
   -H "X-Filename: call.wav" `
   --data-binary "@C:\Audio\call.wav" `
@@ -185,16 +185,16 @@ Response formats:
 - `text` returns only the recognized transcript as `text/plain`.
 - `srt` returns subtitles as `application/x-subrip`.
 
-Authorization:
+Transcription authorization:
 
-- Header: `Authorization: Bearer <WHISPER_API_TOKEN>`
+- Header: `Transcription authorization: Bearer <WHISPER_API_TOKEN>`
 - Missing or invalid token returns `401 Unauthorized`.
 - Missing server token returns `503`, so production cannot accidentally run without authentication.
 
 Operational notes:
 
 - `run-api.ps1` starts the API as a background process and writes `api.pid`; use `status-api.ps1` to inspect it and `stop-api.ps1` to stop it.
-- The dashboard is served from `GET /`; live status updates use the `/ws/status` WebSocket, and raw JSON is available from `GET /status`.
+- The dashboard is served from `GET /`; live status updates use the `/ws/status` WebSocket, raw JSON is available from `GET /status`, and LM Studio models are exposed by `GET /lm-studio/models`.
 - API wrapper logs are written to `logs/api.log`; uvicorn stdout and stderr are written to `logs/api.stdout.log` and `logs/api.stderr.log`.
 - If the configured port is already occupied, `run-api.ps1` exits with a clear error instead of leaving a half-started process.
 - Requests are serialized with a model lock because one GPU model instance is shared by the API process.
@@ -227,7 +227,7 @@ LM_STUDIO_PROMPT=Correct obvious speech-recognition errors in the transcript. Pr
 If your LM Studio server requires an API key, set `LM_STUDIO_TOKEN`. The service sends it as:
 
 ```text
-Authorization: Bearer <LM_STUDIO_TOKEN>
+Transcription authorization: Bearer <LM_STUDIO_TOKEN>
 ```
 
 You can enable or disable LM Studio polishing at runtime from the built-in status dashboard:
@@ -236,7 +236,7 @@ You can enable or disable LM Studio polishing at runtime from the built-in statu
 http://127.0.0.1:18088/
 ```
 
-Enter the Whisper API token in the dashboard control, then use `Enable LM Studio` or `Disable LM Studio`. The switch updates only the running API process; update `.env` as well if you want the same setting after restart.
+Use the dashboard to refresh available LM Studio models, select the polishing model, and enable or disable LM Studio polishing. These dashboard controls are intentionally public on the local status page; the `LM_STUDIO_TOKEN` stays only on the server and is never sent to the browser. The prompt is read-only in the dashboard and cannot be changed through the public config endpoint. Runtime changes affect only the running API process; update `.env` as well if you want the same settings after restart.
 ## Проверка GPU
 
 ```powershell

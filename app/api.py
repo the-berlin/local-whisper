@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 import os
+import requests
 import threading
 import time
 from collections import deque
@@ -88,10 +89,10 @@ STATUS_PAGE = r'''<!doctype html>
     .chips { display: flex; flex-wrap: wrap; gap: 8px; }
     .chip { background: var(--chip); border: 1px solid var(--line); border-radius: 999px; color: var(--soft); padding: 5px 9px; font-size: 12px; }
     .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
-    button, input { border: 1px solid var(--line); background: var(--panel-2); color: var(--text); border-radius: 7px; padding: 7px 10px; font: inherit; font-size: 12px; }
+    button, input, select { border: 1px solid var(--line); background: var(--panel-2); color: var(--text); border-radius: 7px; padding: 7px 10px; font: inherit; font-size: 12px; }
     button { cursor: pointer; }
     button:hover { border-color: var(--blue); }
-    input { min-width: 260px; }
+    input, select { min-width: 260px; }
     table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 12px; }
     th, td { padding: 8px 7px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; overflow: hidden; text-overflow: ellipsis; }
     th { color: var(--muted); font-weight: 600; background: var(--panel-2); position: sticky; top: 0; }
@@ -133,8 +134,9 @@ STATUS_PAGE = r'''<!doctype html>
     function App() {
       const [data, setData] = useState(null);
       const [connected, setConnected] = useState(false);
-      const [apiToken, setApiToken] = useState(() => localStorage.getItem('localWhisperApiToken') || '');
       const [actionStatus, setActionStatus] = useState('');
+      const [lmModels, setLmModels] = useState([]);
+      const [lmModelsError, setLmModelsError] = useState('');
       useEffect(() => {
         let closed = false;
         let ws;
@@ -155,20 +157,25 @@ STATUS_PAGE = r'''<!doctype html>
       const history = s.history || [];
       const lm = config.lm_studio || {};
       const avg = stats.completed_requests ? stats.total_processing_seconds / stats.completed_requests : 0;
-      const saveToken = (value) => {
-        setApiToken(value);
-        if (value) localStorage.setItem('localWhisperApiToken', value);
-        else localStorage.removeItem('localWhisperApiToken');
+      const refreshLmModels = async () => {
+        setLmModelsError('');
+        try {
+          const response = await fetch('/lm-studio/models');
+          const payload = await response.json();
+          if (!response.ok) throw new Error(payload.detail || payload.error || response.statusText);
+          setLmModels(payload.models || []);
+          if (payload.error) setLmModelsError(payload.error);
+        } catch (err) {
+          setLmModels([]);
+          setLmModelsError(err.message);
+        }
       };
       const setLmEnabled = async (enabled) => {
         setActionStatus('Updating LM Studio...');
         try {
           const response = await fetch('/config/lm-studio', {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': 'Bearer ' + apiToken,
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ enabled }),
           });
           if (!response.ok) throw new Error(await response.text());
@@ -178,6 +185,22 @@ STATUS_PAGE = r'''<!doctype html>
           setActionStatus('Update failed: ' + err.message);
         }
       };
+      const setLmModel = async (model) => {
+        setActionStatus('Updating LM Studio model...');
+        try {
+          const response = await fetch('/config/lm-studio', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ model }),
+          });
+          if (!response.ok) throw new Error(await response.text());
+          setData(await response.json());
+          setActionStatus('LM Studio model selected');
+        } catch (err) {
+          setActionStatus('Update failed: ' + err.message);
+        }
+      };
+      useEffect(() => { refreshLmModels(); }, []);
       return e(React.Fragment, null,
         e('header', null,
           e('div', null, e('h1', null, 'Local Whisper Transcriber'), e('div', { className: 'sub' }, 'Runtime status, request history, model configuration, and live queue activity')),
@@ -222,11 +245,17 @@ STATUS_PAGE = r'''<!doctype html>
               e('span', { className: 'chip' }, 'Max tokens: ' + (lm.max_tokens || '-'))
             ),
             e('div', { className: 'actions' },
-              e('input', { type: 'password', placeholder: 'API token for settings changes', value: apiToken, onChange: event => saveToken(event.target.value) }),
               e('button', { onClick: () => setLmEnabled(true), disabled: lm.enabled }, 'Enable LM Studio'),
               e('button', { onClick: () => setLmEnabled(false), disabled: !lm.enabled }, 'Disable LM Studio'),
+              e('button', { onClick: refreshLmModels }, 'Refresh models'),
+              e('select', { value: lm.model || '', onChange: event => setLmModel(event.target.value) },
+                e('option', { value: lm.model || '' }, lm.model || 'Select model'),
+                lmModels.map(model => e('option', { key: model.id, value: model.id }, model.id))
+              ),
               e('span', { className: 'small' }, actionStatus)
             ),
+            lmModelsError ? e('div', { className: 'small errtext', style: { marginTop: '8px' } }, 'LM Studio models: ' + lmModelsError) : null,
+            lmModels.length ? e('div', { className: 'small', style: { marginTop: '8px' } }, 'Available models: ' + lmModels.map(model => model.id).join(', ')) : null,
             e('div', { style: { marginTop: '14px' } }, e('div', { className: 'small', style: { marginBottom: '6px' } }, 'LM Studio prompt'), e('pre', null, lm.prompt || '-'))
           )
         ),
@@ -274,6 +303,35 @@ def require_token(authorization: Annotated[str | None, Header()] = None) -> None
     expected = f"Bearer {API_TOKEN}"
     if authorization != expected:
         raise HTTPException(status_code=401, detail="Unauthorized")
+
+
+def lm_studio_headers() -> dict[str, str] | None:
+    token = os.environ.get("LM_STUDIO_TOKEN", "").strip()
+    return {"Authorization": f"Bearer {token}"} if token else None
+
+
+def fetch_lm_studio_models() -> dict[str, Any]:
+    base_url = os.environ.get("LM_STUDIO_BASE_URL", "http://127.0.0.1:1234/v1").rstrip("/")
+    try:
+        response = requests.get(f"{base_url}/models", headers=lm_studio_headers(), timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        models = data.get("data", data if isinstance(data, list) else [])
+        normalized = []
+        for item in models:
+            if isinstance(item, str):
+                normalized.append({"id": item})
+            elif isinstance(item, dict) and item.get("id"):
+                normalized.append(
+                    {
+                        "id": item.get("id"),
+                        "owned_by": item.get("owned_by"),
+                        "created": item.get("created"),
+                    }
+                )
+        return {"models": normalized, "error": None}
+    except Exception as exc:
+        return {"models": [], "error": f"{type(exc).__name__}: {exc}"}
 
 
 async def read_body_in_memory(request: Request) -> bytes:
@@ -417,15 +475,31 @@ def status_json() -> dict[str, Any]:
     return current_snapshot()
 
 
-@app.post("/config/lm-studio", dependencies=[Depends(require_token)])
+@app.get("/lm-studio/models")
+def lm_studio_models() -> dict[str, Any]:
+    result = fetch_lm_studio_models()
+    return {
+        "base_url": os.environ.get("LM_STUDIO_BASE_URL", "http://127.0.0.1:1234/v1"),
+        "token_configured": bool(os.environ.get("LM_STUDIO_TOKEN", "").strip()),
+        **result,
+    }
+
+
+@app.post("/config/lm-studio")
 async def set_lm_studio_config(request: Request) -> dict[str, Any]:
     try:
         body = await request.json()
     except Exception:
         body = {}
-    enabled = bool(body.get("enabled"))
-    os.environ["LM_STUDIO_ENABLED"] = "true" if enabled else "false"
-    log(f"LM Studio polishing {'enabled' if enabled else 'disabled'} from dashboard")
+    if "enabled" in body:
+        enabled = bool(body.get("enabled"))
+        os.environ["LM_STUDIO_ENABLED"] = "true" if enabled else "false"
+        log(f"LM Studio polishing {'enabled' if enabled else 'disabled'} from dashboard")
+    if "model" in body:
+        selected_model = str(body.get("model") or "").strip()
+        if selected_model:
+            os.environ["LM_STUDIO_MODEL"] = selected_model
+            log(f"LM Studio model selected from dashboard: {selected_model}")
     return current_snapshot()
 
 @app.post("/v1/transcriptions", dependencies=[Depends(require_token)])
