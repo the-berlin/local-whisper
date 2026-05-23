@@ -152,32 +152,64 @@ def write_srt(path: Path, segments: list[dict]) -> None:
 def polish_with_lm_studio(text: str) -> Optional[str]:
     if not env_bool("LM_STUDIO_ENABLED", False):
         return None
+    return polish_chunks_with_lm_studio([text])
+
+
+def chunk_transcript_for_lm_studio(segments: list[dict]) -> list[str]:
+    max_chars = max(env_int("LM_STUDIO_CHUNK_MAX_CHARS", 3500), 500)
+    chunks: list[str] = []
+    current: list[str] = []
+    current_chars = 0
+
+    source_lines = [segment["text"].strip() for segment in segments if segment.get("text", "").strip()]
+    for line in source_lines:
+        line_chars = len(line)
+        if current and current_chars + line_chars + 1 > max_chars:
+            chunks.append("\n".join(current).strip())
+            current = []
+            current_chars = 0
+        current.append(line)
+        current_chars += line_chars + 1
+
+    if current:
+        chunks.append("\n".join(current).strip())
+    return chunks
+
+
+def polish_chunks_with_lm_studio(chunks: list[str]) -> Optional[str]:
+    chunks = [chunk.strip() for chunk in chunks if chunk.strip()]
+    if not chunks:
+        return None
     base_url = os.environ.get("LM_STUDIO_BASE_URL", "http://127.0.0.1:1234/v1").rstrip("/")
     model = os.environ.get("LM_STUDIO_MODEL", "local-model")
     prompt = os.environ.get("LM_STUDIO_PROMPT", "Clean up this transcript without changing meaning.")
     token = os.environ.get("LM_STUDIO_TOKEN", "").strip()
     headers = {"Authorization": f"Bearer {token}"} if token else None
-    payload = {
-        "model": model,
-        "messages": [
-            {"role": "system", "content": prompt},
-            {"role": "user", "content": text},
-        ],
-        "temperature": 0.1,
-    }
     max_tokens = env_int("LM_STUDIO_MAX_TOKENS", 4096)
-    if max_tokens > 0:
-        payload["max_tokens"] = max_tokens
+    polished_chunks: list[str] = []
     try:
-        response = requests.post(
-            f"{base_url}/chat/completions",
-            headers=headers,
-            json=payload,
-            timeout=300,
-        )
-        response.raise_for_status()
-        data = response.json()
-        return data["choices"][0]["message"]["content"].strip()
+        for index, chunk in enumerate(chunks, start=1):
+            payload = {
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": prompt},
+                    {"role": "user", "content": chunk},
+                ],
+                "temperature": 0.1,
+            }
+            if max_tokens > 0:
+                payload["max_tokens"] = max_tokens
+            log(f"LM Studio polishing chunk {index}/{len(chunks)}")
+            response = requests.post(
+                f"{base_url}/chat/completions",
+                headers=headers,
+                json=payload,
+                timeout=300,
+            )
+            response.raise_for_status()
+            data = response.json()
+            polished_chunks.append(data["choices"][0]["message"]["content"].strip())
+        return "\n".join(polished_chunks).strip()
     except Exception as exc:
         log(f"LM Studio polishing skipped: {exc}")
         return None
@@ -278,7 +310,7 @@ def transcribe_audio(model: WhisperModel, settings: Settings, audio_source, sour
         "segments": segments,
         "srt": build_srt(segments),
     }
-    polished = polish_with_lm_studio(text)
+    polished = polish_chunks_with_lm_studio(chunk_transcript_for_lm_studio(segments)) if env_bool("LM_STUDIO_ENABLED", False) else None
     if polished:
         result["polished_text"] = polished
     return result

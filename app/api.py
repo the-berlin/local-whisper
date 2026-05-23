@@ -242,7 +242,9 @@ STATUS_PAGE = r'''<!doctype html>
               e('span', { className: 'chip' }, 'Endpoint: ' + (lm.base_url || '-')),
               e('span', { className: 'chip' }, 'LM model: ' + (lm.model || '-')),
               e('span', { className: 'chip' }, 'LM token: ' + (lm.token_configured ? 'configured' : 'missing')),
-              e('span', { className: 'chip' }, 'Max tokens: ' + (lm.max_tokens || '-'))
+              e('span', { className: 'chip' }, 'Max tokens: ' + (lm.max_tokens || '-')),
+              e('span', { className: 'chip' }, 'Chunk chars: ' + (lm.chunk_max_chars || '-')),
+              e('span', { className: 'chip' }, 'Models timeout: ' + (lm.models_timeout_seconds || '-') + 's')
             ),
             e('div', { className: 'actions' },
               e('button', { onClick: () => setLmEnabled(true), disabled: lm.enabled }, 'Enable LM Studio'),
@@ -310,28 +312,43 @@ def lm_studio_headers() -> dict[str, str] | None:
     return {"Authorization": f"Bearer {token}"} if token else None
 
 
+def configured_lm_studio_model() -> str:
+    return os.environ.get("LM_STUDIO_MODEL", "local-model").strip() or "local-model"
+
+
 def fetch_lm_studio_models() -> dict[str, Any]:
     base_url = os.environ.get("LM_STUDIO_BASE_URL", "http://127.0.0.1:1234/v1").rstrip("/")
+    fallback_model = configured_lm_studio_model()
+    normalized: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    def add_model(model_id: str, **extra: Any) -> None:
+        model_id = model_id.strip()
+        if not model_id or model_id in seen:
+            return
+        seen.add(model_id)
+        normalized.append({"id": model_id, **extra})
+
+    add_model(fallback_model, source="env")
     try:
-        response = requests.get(f"{base_url}/models", headers=lm_studio_headers(), timeout=10)
+        timeout = env_int("LM_STUDIO_MODELS_TIMEOUT_SECONDS", 2)
+        response = requests.get(f"{base_url}/models", headers=lm_studio_headers(), timeout=max(timeout, 1))
         response.raise_for_status()
         data = response.json()
         models = data.get("data", data if isinstance(data, list) else [])
-        normalized = []
         for item in models:
             if isinstance(item, str):
-                normalized.append({"id": item})
+                add_model(item, source="server")
             elif isinstance(item, dict) and item.get("id"):
-                normalized.append(
-                    {
-                        "id": item.get("id"),
-                        "owned_by": item.get("owned_by"),
-                        "created": item.get("created"),
-                    }
+                add_model(
+                    str(item.get("id")),
+                    source="server",
+                    owned_by=item.get("owned_by"),
+                    created=item.get("created"),
                 )
         return {"models": normalized, "error": None}
     except Exception as exc:
-        return {"models": [], "error": f"{type(exc).__name__}: {exc}"}
+        return {"models": normalized, "error": f"{type(exc).__name__}: {exc}"}
 
 
 async def read_body_in_memory(request: Request) -> bytes:
@@ -368,9 +385,11 @@ def current_snapshot() -> dict[str, Any]:
                 "lm_studio": {
                     "enabled": env_bool("LM_STUDIO_ENABLED", False),
                     "base_url": os.environ.get("LM_STUDIO_BASE_URL", "http://127.0.0.1:1234/v1"),
-                    "model": os.environ.get("LM_STUDIO_MODEL", "local-model"),
+                    "model": configured_lm_studio_model(),
                     "token_configured": bool(os.environ.get("LM_STUDIO_TOKEN", "").strip()),
                     "max_tokens": env_int("LM_STUDIO_MAX_TOKENS", 4096),
+                    "chunk_max_chars": env_int("LM_STUDIO_CHUNK_MAX_CHARS", 3500),
+                    "models_timeout_seconds": env_int("LM_STUDIO_MODELS_TIMEOUT_SECONDS", 2),
                     "prompt": os.environ.get("LM_STUDIO_PROMPT", "Clean up this transcript without changing meaning."),
                 },
             },

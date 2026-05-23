@@ -1,6 +1,6 @@
 ﻿# Local Whisper Transcriber
 
-Автономный локальный транскрибатор для Windows 11 Pro / Windows Server 2022 + NVIDIA GPU. Использует `faster-whisper`, CUDA через `ctranslate2`, и хранит модели локально в `models`.
+Автономный локальный транскрибатор для Windows Platform, including Windows Server, + NVIDIA GPU. Использует `faster-whisper`, CUDA через `ctranslate2`, и хранит модели локально в `models`.
 
 ## Быстрый запуск
 
@@ -59,7 +59,7 @@ cd <install-dir>
 
 Задача называется `LocalWhisperTranscriber` и запускает `run-watch.ps1` при старте Windows.
 
-## Перенос на Windows Server 2022 + RTX 3090
+## Перенос на Windows Platform, including Windows Server, + RTX 3090
 
 1. Установите свежий NVIDIA Driver для RTX 3090.
 2. Установите Python 3.12 x64 и включите Python Launcher `py`.
@@ -172,7 +172,7 @@ Return SRT subtitles:
 
 ```powershell
 curl.exe `
-  -H "Transcription authorization: Bearer change-this-token" `
+  -H "Authorization: Bearer change-this-token" `
   -H "Content-Type: application/octet-stream" `
   -H "X-Filename: call.wav" `
   --data-binary "@C:\Audio\call.wav" `
@@ -187,7 +187,7 @@ Response formats:
 
 Transcription authorization:
 
-- Header: `Transcription authorization: Bearer <WHISPER_API_TOKEN>`
+- Header: `Authorization: Bearer <WHISPER_API_TOKEN>`
 - Missing or invalid token returns `401 Unauthorized`.
 - Missing server token returns `503`, so production cannot accidentally run without authentication.
 
@@ -220,6 +220,8 @@ LM_STUDIO_ENABLED=false
 LM_STUDIO_BASE_URL=http://127.0.0.1:1234/v1
 LM_STUDIO_MODEL=local-model
 LM_STUDIO_MAX_TOKENS=4096
+LM_STUDIO_CHUNK_MAX_CHARS=3500
+LM_STUDIO_MODELS_TIMEOUT_SECONDS=2
 LM_STUDIO_TOKEN=
 LM_STUDIO_PROMPT=Correct obvious speech-recognition errors in the transcript. Preserve the original meaning, speaker intent, names, numbers, dates, technical terms, and structure. Do not add facts, explanations, summaries, or new information. Return only the corrected transcript text.
 ```
@@ -227,7 +229,7 @@ LM_STUDIO_PROMPT=Correct obvious speech-recognition errors in the transcript. Pr
 If your LM Studio server requires an API key, set `LM_STUDIO_TOKEN`. The service sends it as:
 
 ```text
-Transcription authorization: Bearer <LM_STUDIO_TOKEN>
+Authorization: Bearer <LM_STUDIO_TOKEN>
 ```
 
 You can enable or disable LM Studio polishing at runtime from the built-in status dashboard:
@@ -236,7 +238,9 @@ You can enable or disable LM Studio polishing at runtime from the built-in statu
 http://127.0.0.1:18088/
 ```
 
-Use the dashboard to refresh available LM Studio models, select the polishing model, and enable or disable LM Studio polishing. These dashboard controls are intentionally public on the local status page; the `LM_STUDIO_TOKEN` stays only on the server and is never sent to the browser. The prompt is read-only in the dashboard and cannot be changed through the public config endpoint. Runtime changes affect only the running API process; update `.env` as well if you want the same settings after restart.
+Use the dashboard to refresh available LM Studio models, select the polishing model, and enable or disable LM Studio polishing. These dashboard controls are intentionally public on the local status page; the `LM_STUDIO_TOKEN` stays only on the server and is never sent to the browser. If LM Studio is slow or unavailable, the dashboard still shows the model from `.env` and reports the connection error as diagnostics. The prompt is read-only in the dashboard and cannot be changed through the public config endpoint. Runtime changes affect only the running API process; update `.env` as well if you want the same settings after restart.
+
+Long transcripts are polished in chunks built from Whisper segments. Tune `LM_STUDIO_CHUNK_MAX_CHARS` for smaller local models; `3500` is a conservative default. `LM_STUDIO_MODELS_TIMEOUT_SECONDS` controls how long the dashboard waits for `/v1/models` before falling back to the configured `.env` model.
 ## Проверка GPU
 
 ```powershell
