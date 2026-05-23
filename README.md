@@ -131,7 +131,7 @@ Built-in status dashboard:
 http://127.0.0.1:18088/
 ```
 
-The root page is a React dashboard with live WebSocket updates from `/ws/status`. It shows loaded model settings, LM Studio configuration, active jobs, counters, processing totals, and recent request history. The same data is available as JSON:
+The root page is a React dashboard with live WebSocket updates from `/ws/status`. It shows loaded model settings, LM Studio configuration and runtime toggle, active jobs, counters, processing totals, and recent request history. The same data is available as JSON:
 
 ```powershell
 Invoke-RestMethod -Uri http://127.0.0.1:18088/status
@@ -211,18 +211,32 @@ winget install Gyan.FFmpeg
 
 ## LM Studio
 
-LM Studio не нужен для распознавания. Его можно включить как второй этап для аккуратной вычитки текста:
+LM Studio is optional and is used only as a second pass to polish the raw Whisper transcript. Whisper output is always returned as `text`; when LM Studio polishing is enabled, API JSON responses also include `polished_text`.
 
-1. В LM Studio запустите Local Server на `http://127.0.0.1:1234/v1`.
-2. В `.env` установите:
+Configure LM Studio in `.env`:
 
 ```text
-LM_STUDIO_ENABLED=true
-LM_STUDIO_MODEL=имя-модели-в-LM-Studio
+LM_STUDIO_ENABLED=false
+LM_STUDIO_BASE_URL=http://127.0.0.1:1234/v1
+LM_STUDIO_MODEL=local-model
+LM_STUDIO_MAX_TOKENS=4096
+LM_STUDIO_TOKEN=
+LM_STUDIO_PROMPT=Correct obvious speech-recognition errors in the transcript. Preserve the original meaning, speaker intent, names, numbers, dates, technical terms, and structure. Do not add facts, explanations, summaries, or new information. Return only the corrected transcript text.
 ```
 
-Транскрипт Whisper останется неизменным в `transcript.txt`, а вычитанный текст появится в `transcript.polished.txt`.
+If your LM Studio server requires an API key, set `LM_STUDIO_TOKEN`. The service sends it as:
 
+```text
+Authorization: Bearer <LM_STUDIO_TOKEN>
+```
+
+You can enable or disable LM Studio polishing at runtime from the built-in status dashboard:
+
+```text
+http://127.0.0.1:18088/
+```
+
+Enter the Whisper API token in the dashboard control, then use `Enable LM Studio` or `Disable LM Studio`. The switch updates only the running API process; update `.env` as well if you want the same setting after restart.
 ## Проверка GPU
 
 ```powershell
@@ -230,6 +244,4 @@ LM_STUDIO_MODEL=имя-модели-в-LM-Studio
 ```
 
 Если вывод содержит `float16`, CUDA доступна.
-
-
 

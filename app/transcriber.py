@@ -155,17 +155,24 @@ def polish_with_lm_studio(text: str) -> Optional[str]:
     base_url = os.environ.get("LM_STUDIO_BASE_URL", "http://127.0.0.1:1234/v1").rstrip("/")
     model = os.environ.get("LM_STUDIO_MODEL", "local-model")
     prompt = os.environ.get("LM_STUDIO_PROMPT", "Clean up this transcript without changing meaning.")
+    token = os.environ.get("LM_STUDIO_TOKEN", "").strip()
+    headers = {"Authorization": f"Bearer {token}"} if token else None
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": prompt},
+            {"role": "user", "content": text},
+        ],
+        "temperature": 0.1,
+    }
+    max_tokens = env_int("LM_STUDIO_MAX_TOKENS", 4096)
+    if max_tokens > 0:
+        payload["max_tokens"] = max_tokens
     try:
         response = requests.post(
             f"{base_url}/chat/completions",
-            json={
-                "model": model,
-                "messages": [
-                    {"role": "system", "content": prompt},
-                    {"role": "user", "content": text},
-                ],
-                "temperature": 0.1,
-            },
+            headers=headers,
+            json=payload,
             timeout=300,
         )
         response.raise_for_status()
@@ -356,6 +363,7 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         log("Stopped by user")
         raise SystemExit(0)
+
 
 
 

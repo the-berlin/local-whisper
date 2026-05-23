@@ -11,7 +11,7 @@ from typing import Annotated, Any
 from fastapi import Depends, FastAPI, Header, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse, PlainTextResponse
 
-from transcriber import Settings, WhisperModel, env_bool, load_env_file, log, transcribe_bytes
+from transcriber import Settings, WhisperModel, env_bool, env_int, load_env_file, log, transcribe_bytes
 
 ROOT = Path(os.environ.get("WHISPER_ROOT", Path(__file__).resolve().parents[1])).resolve()
 load_env_file(ROOT / ".env")
@@ -87,6 +87,11 @@ STATUS_PAGE = r'''<!doctype html>
     .kv div:nth-child(even) { color: var(--soft); overflow-wrap: anywhere; }
     .chips { display: flex; flex-wrap: wrap; gap: 8px; }
     .chip { background: var(--chip); border: 1px solid var(--line); border-radius: 999px; color: var(--soft); padding: 5px 9px; font-size: 12px; }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+    button, input { border: 1px solid var(--line); background: var(--panel-2); color: var(--text); border-radius: 7px; padding: 7px 10px; font: inherit; font-size: 12px; }
+    button { cursor: pointer; }
+    button:hover { border-color: var(--blue); }
+    input { min-width: 260px; }
     table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 12px; }
     th, td { padding: 8px 7px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; overflow: hidden; text-overflow: ellipsis; }
     th { color: var(--muted); font-weight: 600; background: var(--panel-2); position: sticky; top: 0; }
@@ -128,6 +133,8 @@ STATUS_PAGE = r'''<!doctype html>
     function App() {
       const [data, setData] = useState(null);
       const [connected, setConnected] = useState(false);
+      const [apiToken, setApiToken] = useState(() => localStorage.getItem('localWhisperApiToken') || '');
+      const [actionStatus, setActionStatus] = useState('');
       useEffect(() => {
         let closed = false;
         let ws;
@@ -148,6 +155,29 @@ STATUS_PAGE = r'''<!doctype html>
       const history = s.history || [];
       const lm = config.lm_studio || {};
       const avg = stats.completed_requests ? stats.total_processing_seconds / stats.completed_requests : 0;
+      const saveToken = (value) => {
+        setApiToken(value);
+        if (value) localStorage.setItem('localWhisperApiToken', value);
+        else localStorage.removeItem('localWhisperApiToken');
+      };
+      const setLmEnabled = async (enabled) => {
+        setActionStatus('Updating LM Studio...');
+        try {
+          const response = await fetch('/config/lm-studio', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer ' + apiToken,
+            },
+            body: JSON.stringify({ enabled }),
+          });
+          if (!response.ok) throw new Error(await response.text());
+          setData(await response.json());
+          setActionStatus(enabled ? 'LM Studio enabled' : 'LM Studio disabled');
+        } catch (err) {
+          setActionStatus('Update failed: ' + err.message);
+        }
+      };
       return e(React.Fragment, null,
         e('header', null,
           e('div', null, e('h1', null, 'Local Whisper Transcriber'), e('div', { className: 'sub' }, 'Runtime status, request history, model configuration, and live queue activity')),
@@ -187,7 +217,15 @@ STATUS_PAGE = r'''<!doctype html>
               e('span', { className: 'chip' }, 'API auth: ' + (config.api_token_configured ? 'configured' : 'missing')),
               e('span', { className: 'chip' }, 'LM Studio: ' + (lm.enabled ? 'enabled' : 'disabled')),
               e('span', { className: 'chip' }, 'Endpoint: ' + (lm.base_url || '-')),
-              e('span', { className: 'chip' }, 'LM model: ' + (lm.model || '-'))
+              e('span', { className: 'chip' }, 'LM model: ' + (lm.model || '-')),
+              e('span', { className: 'chip' }, 'LM token: ' + (lm.token_configured ? 'configured' : 'missing')),
+              e('span', { className: 'chip' }, 'Max tokens: ' + (lm.max_tokens || '-'))
+            ),
+            e('div', { className: 'actions' },
+              e('input', { type: 'password', placeholder: 'API token for settings changes', value: apiToken, onChange: event => saveToken(event.target.value) }),
+              e('button', { onClick: () => setLmEnabled(true), disabled: lm.enabled }, 'Enable LM Studio'),
+              e('button', { onClick: () => setLmEnabled(false), disabled: !lm.enabled }, 'Disable LM Studio'),
+              e('span', { className: 'small' }, actionStatus)
             ),
             e('div', { style: { marginTop: '14px' } }, e('div', { className: 'small', style: { marginBottom: '6px' } }, 'LM Studio prompt'), e('pre', null, lm.prompt || '-'))
           )
@@ -273,6 +311,8 @@ def current_snapshot() -> dict[str, Any]:
                     "enabled": env_bool("LM_STUDIO_ENABLED", False),
                     "base_url": os.environ.get("LM_STUDIO_BASE_URL", "http://127.0.0.1:1234/v1"),
                     "model": os.environ.get("LM_STUDIO_MODEL", "local-model"),
+                    "token_configured": bool(os.environ.get("LM_STUDIO_TOKEN", "").strip()),
+                    "max_tokens": env_int("LM_STUDIO_MAX_TOKENS", 4096),
                     "prompt": os.environ.get("LM_STUDIO_PROMPT", "Clean up this transcript without changing meaning."),
                 },
             },
@@ -377,6 +417,17 @@ def status_json() -> dict[str, Any]:
     return current_snapshot()
 
 
+@app.post("/config/lm-studio", dependencies=[Depends(require_token)])
+async def set_lm_studio_config(request: Request) -> dict[str, Any]:
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    enabled = bool(body.get("enabled"))
+    os.environ["LM_STUDIO_ENABLED"] = "true" if enabled else "false"
+    log(f"LM Studio polishing {'enabled' if enabled else 'disabled'} from dashboard")
+    return current_snapshot()
+
 @app.post("/v1/transcriptions", dependencies=[Depends(require_token)])
 async def create_transcription(
     request: Request,
@@ -407,3 +458,5 @@ async def create_transcription(
     if response_format.lower() == "srt":
         return PlainTextResponse(result["srt"], media_type="application/x-subrip")
     return result
+
+
