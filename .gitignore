@@ -1,0 +1,32 @@
+﻿# Local Python environment
+.venv/
+__pycache__/
+*.py[cod]
+
+# Local runtime config and secrets
+.env
+.env.local
+*.local.env
+
+# Downloaded Whisper models and Hugging Face cache
+models/*
+!models/.gitkeep
+
+# Runtime audio queues and generated transcripts
+inbox/*
+!inbox/.gitkeep
+archive/*
+!archive/.gitkeep
+failed/*
+!failed/.gitkeep
+out/*
+!out/.gitkeep
+logs/*
+!logs/.gitkeep
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+Desktop.ini
+.vscode/
+.idea/
